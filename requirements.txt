@@ -1,5 +1,7 @@
 Flask
 requests
-threading
 gunicorn
 pytest
+flask_cors
+socksio
+pysocks
